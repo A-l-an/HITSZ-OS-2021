@@ -80,6 +80,7 @@ kalloc(void)
   return (void *)r;
 }
 
+//计算剩余内存空间//
 uint64 kalloc_info(void)
 {
   // struct run *r;
@@ -88,12 +89,9 @@ uint64 kalloc_info(void)
   // if (r)
   //   kmem.freelist = r->next;
 
-  acquire(&kmem.lock);
-
-  //计算剩余内存空间
-  uint64 length = 0;
+  uint64 length = 0; //链表长度
   struct run *temp = kmem.freelist;
-  release(&kmem.lock);
+
   while (temp)
   {
     length++;

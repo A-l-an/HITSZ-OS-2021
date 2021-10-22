@@ -98,6 +98,7 @@ sys_uptime(void)
   return xticks;
 }
 
+/**系统调用信息打印功能**/
 uint64
 sys_trace(void)
 {
@@ -113,11 +114,11 @@ sys_trace(void)
   }
 }
 
+/**收集xv6运行信息**/
 uint64
 sys_sysinfo(void)
 {
   uint64 st;
-  // struct sysinfo *info; //用户态的结构体
   struct proc *p = myproc();
   struct
   {
@@ -126,17 +127,15 @@ sys_sysinfo(void)
     uint64 freefd;  //当前进程可用文件描述符的数量，即尚未使用的文件描述符数量
   } sysinfo;
 
-  sysinfo.freemem = kalloc_info();        //剩余的内存字节数
-  sysinfo.nproc = procdump_info();        //状态为UNUSED的进程个数
-  sysinfo.freefd = FreeDescriptor_info(); //当前进程可用文件描述符的数量
+  sysinfo.freemem = kalloc_info();        
+  sysinfo.nproc = nproc_info();       
+  sysinfo.freefd = FreeDescriptor_info(); 
 
-  //获取结构体指针
-  // if (argptr(0, info) < 0 || argaddr(0, &st) < 0)
+  //获取用户态结构体地址（不可在内核态更改，只能通过copyout传）
   if (argaddr(0, &st) < 0)
     return -1;
   else
   {
-    //输出出去
     if (copyout(p->pagetable, st, (char *)&sysinfo, sizeof(sysinfo)) < 0)
       return -1;
     else

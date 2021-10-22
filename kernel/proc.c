@@ -722,25 +722,16 @@ void procdump(void)
   }
 }
 
-//查找状态为UNUSED的进程个数
-uint64 procdump_info(void)
+//查找状态为UNUSED的进程个数//
+uint64 nproc_info(void)
 {
-  // static char *states[] = {
-  //     [UNUSED] "unused",
-  //     [SLEEPING] "sleep ",
-  //     [RUNNABLE] "runble",
-  //     [RUNNING] "run   ",
-  //     [ZOMBIE] "zombie"};
   struct proc *p;
   uint64 num = 0; //状态为UNUSED的进程个数
 
   for (p = proc; p < &proc[NPROC]; p++)
   {
     if (p->state == UNUSED)
-    {
       num++;
-      continue;
-    }
   }
   return num;
 }
@@ -750,12 +741,11 @@ uint64 FreeDescriptor_info(void)
 {
   struct proc *p = myproc();
   uint64 num = 0;
+
   for (int fd = 0; fd < NOFILE; fd++)
   {
     if (!(p->ofile[fd])) //即文件未被使用（打开）
-    {
       num++;
-    }
   }
   return num;
 }

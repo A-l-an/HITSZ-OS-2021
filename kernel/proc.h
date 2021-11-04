@@ -103,4 +103,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  pagetable_t k_pagetable;    //与每个pcb对应的内核页表
 };

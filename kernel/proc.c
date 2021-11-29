@@ -18,10 +18,14 @@ struct spinlock pid_lock;
 extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
+// 我自己加的；
+void my_free(pagetable_t pagetable);
 
 extern char trampoline[]; // trampoline.S
 
 // initialize the proc table at boot time.
+// 在系统引导时，用于给进程分配内核栈的物理页并在页表建立映射。
+// 应在allocproc()中实现页表映射的建立，因为执行的procinit的时候进程的内核表还未被创建。
 void
 procinit(void)
 {
@@ -34,14 +38,17 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+
+      /** 只保留内存的分配 **/
+
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);  //在内核页表建立内核栈的映射
+      // p->kstack = va;                 //将内核栈的虚拟地址存储进程控制块PCB
   }
-  kvminithart();
+  // kvminithart();    //重新加载内核页表到satp，让硬件知道新的PTE
 }
 
 // Must be called with interrupts disabled,
@@ -112,6 +119,15 @@ found:
     release(&p->lock);
     return 0;
   }
+  // 创建内核页表以及内核栈 //
+  p->k_pagetable = my_kvminit();
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  // 把内核栈的pa映射到进程的内核页表里
+  my_kvmmap(p->k_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -139,9 +155,20 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  // 释放内核栈
+  if(p->kstack)
+    uvmunmap(p->k_pagetable, p->kstack, 1, 1);
+  p->kstack = 0;
+  // 释放内核页表
+  if(p->pagetable)
+    my_free(p->k_pagetable);
+  p->k_pagetable = 0;
+  // 释放用户页表
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
+
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -150,6 +177,30 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+}
+
+// 释放页表但不释放叶子页表指向的物理页帧
+void my_free(pagetable_t pagetable)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for (int i = 0; i < 512; i++)
+  {
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V)
+    {
+      // this PTE points to a lower-level page table.
+      pagetable[i] = 0;
+      // 只释放非叶节点 //
+      if ((pte & (PTE_R | PTE_W | PTE_X)) == 0){
+        uint64 child = PTE2PA(pte);
+        my_free((pagetable_t)child);
+      }
+    }else if (pte & PTE_V)
+    {
+      panic("freewalk: leaf");
+    }
+  }
+  kfree((void *)pagetable);
 }
 
 // Create a user page table for a given process,
@@ -473,8 +524,14 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
-        swtch(&c->context, &p->context);
 
+        // 使得切换进程的时候切换进程内核页表。
+        w_satp(MAKE_SATP(p->k_pagetable));  //切换页表将其放入寄存器 satp中
+        sfence_vma();
+        swtch(&c->context, &p->context);
+        // 插入全局内核页表
+        // 当目前没有进程运行的时候，scheduler()应该要satp载入全局的内核页表
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0; // cpu dosen't run any process now

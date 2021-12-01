@@ -161,7 +161,7 @@ freeproc(struct proc *p)
     uvmunmap(p->k_pagetable, p->kstack, 1, 1);
   p->kstack = 0;
   // 释放内核页表
-  if(p->pagetable)
+  if(p->k_pagetable)
     my_free(p->k_pagetable);
   p->k_pagetable = 0;
   // 释放用户页表
@@ -530,12 +530,13 @@ scheduler(void)
         c->proc = p;
 
         // 使得切换进程的时候切换进程内核页表。
-        w_satp(MAKE_SATP(p->k_pagetable));  //切换页表将其放入寄存器 satp中
+        w_satp(MAKE_SATP(p->k_pagetable));  //切换页表将其放入寄存器satp中
         sfence_vma();
         swtch(&c->context, &p->context);
         // 插入全局内核页表
         // 当目前没有进程运行的时候，scheduler()应该要satp载入全局的内核页表
-        kvminithart();
+        kvminithart();                    //打开页表，将根页表页的物理地址写入satp。
+
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0; // cpu dosen't run any process now

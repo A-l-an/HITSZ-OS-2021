@@ -504,7 +504,7 @@ int test_pagetable()
   return satp != gsatp;
 }
 
-
+// 打印页表信息（包括子页表）
 void vmprint(pagetable_t pgtbl)
 {
   int cnt = 0;
@@ -542,7 +542,7 @@ void vmprint(pagetable_t pgtbl)
 pagetable_t
 my_kvminit()
 {
-  // 妈耶..之前没有写pagetable_t,一直报错说我使用的是全局的内核页表
+  // 妈耶..之前没有写类型声明pagetable_t,一直报错说我使用的是全局的内核页表（变量名别设置一样的）
   pagetable_t k_pagetable = (pagetable_t)kalloc();
   memset(k_pagetable, 0, PGSIZE);
 
@@ -566,4 +566,22 @@ my_kvminit()
   my_kvmmap(k_pagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 
   return k_pagetable;   // 肯定要设置返回值，否则独立的内核页表怎么使用？（与全局不同）
+}
+
+//** 把进程的用户页表映射到内核页表中 **//
+// 参考walkaddr()里walk()的调用
+void User_map_Kernel(pagetable_t pagetable, pagetable_t k_pagetable, uint64 addr_start, uint64 sz)
+{
+  pte_t *pte;     //用户页表项
+  pte_t *k_pte;   //内核页表项
+  
+  // 内核页表项还不存在，因此walk第三个参数是1，要给他分配.
+  // 一个叶子页表大小就为4096，所以要一个个跳
+  for (uint64 va = addr_start; va < addr_start + sz; va += PGSIZE)
+  {
+    pte   = walk(pagetable, va, 0);
+    k_pte = walk(k_pagetable, va, 1);
+    // 更新内核页表项的标识位
+    *k_pte = *pte & ~PTE_U;
+  }
 }

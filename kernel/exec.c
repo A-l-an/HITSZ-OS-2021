@@ -99,6 +99,10 @@ int exec(char *path, char **argv)
   if (copyout(pagetable, sp, (char *)ustack, (argc + 1) * sizeof(uint64)) < 0)
     goto bad;
 
+  // 要重新设置新的映射则应该先解除原来的映射，参考uvmfree() -- 不重新设置其实也行
+  uvmunmap(p->k_pagetable, 0, PGROUNDUP(oldsz) / PGSIZE, 0);
+  User_map_Kernel(pagetable, p->k_pagetable, 0, sz);
+
   // arguments to user main(argc, argv)
   // argc is returned via the system call return
   // value, which goes in a0.
@@ -117,7 +121,7 @@ int exec(char *path, char **argv)
   p->trapframe->epc = elf.entry; // initial program counter = main
   p->trapframe->sp = sp;         // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
-  // vmprint!!!!!!!!!! //
+  //////////// vmprint ////////////
   if (p->pid == 1)
   {
     printf("page table %p\n", p->pagetable);

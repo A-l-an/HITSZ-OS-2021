@@ -271,7 +271,6 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
-
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -280,6 +279,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  
+  User_map_Kernel(p->pagetable, p->k_pagetable, 0, p->sz);
 
   release(&p->lock);
 }
@@ -327,6 +328,9 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
+
+  // 放在后面会影响某个函数的结果（sbrkmuch）
+  User_map_Kernel(np->pagetable, np->k_pagetable, 0, np->sz);
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -719,7 +723,7 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 {
   struct proc *p = myproc();
   if(user_src){
-    return copyin(p->pagetable, dst, src, len);
+    return copyin_new(p->pagetable, dst, src, len);
   } else {
     memmove(dst, (char*)src, len);
     return 0;

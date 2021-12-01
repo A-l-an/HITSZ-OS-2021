@@ -43,12 +43,24 @@ sys_sbrk(void)
 {
   int addr;
   int n;
+  struct proc *p = myproc();
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
-  if(growproc(n) < 0)
+  addr = p->sz;
+  // 增长或缩小用户内存n字节
+  if(growproc(n) < 0)   
     return -1;
+
+  if(n > 0){            // 扩张
+    User_map_Kernel(p->pagetable, p->k_pagetable, addr, n);
+  }else{                // 缩小
+    int va;
+    for (va = addr - PGSIZE; va >= addr - n; va -= PGSIZE){
+      uvmunmap(p->k_pagetable, va, 1, 0);
+    }
+  }
+  
   return addr;
 }
 
